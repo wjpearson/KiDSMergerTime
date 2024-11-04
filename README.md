@@ -1,4 +1,4 @@
-# Determining the time before or after a galaxy merger event
+# Observationally derived change in star-formation rate as mergers progress
 ## William J. Pearson
 ### B. Margalef Bentabol, V. Rodriguez-Gomez, L. Wang, L. E. Suelves
 
@@ -13,7 +13,7 @@ For example: `88_broadband_448870_xy.-432.fits`
 These should be placed in the `./data/train/`, `./data/valid/`, and `./data/test/` directories.
   
 
-## Architectures
+## Architecture
 
 We use the CNN of [Pearson et al. A&A, 687, A45 (2024)](https://ui.adsabs.harvard.edu/abs/2024A%26A...687A..45P/abstract). This CNN has  with six convolutional layers, three fully connected (dense) layers, and a single output neuron with sigmoid activation. The convolutional layers have 32, 64, 128, 256, 512, and 1024 filters with a size of 6, 5, 3, 3, 2, and 2 pixels, respectively, stride 1 and "same" padding. The dense layers have 2048, 512, and 128 neurons. The convolutional layers are followed by batch normalisation, dropout with a rate of 0.2, and 2 x 2 max-pooling. The dense layers are followed by batch normalisation and dropout with a rate of 0.1. The input is a four channel 128 x 128 pixel image using u, g, r, and i bands of our TNG images. The network is trained with MSE loss using the Adam optimiser.
 
