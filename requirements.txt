@@ -1,0 +1,5 @@
+numpy>=1.23.0
+tensorflow>=2.9.1
+tensorflow-hub>=0.12.0
+tf-fits>=1.0.0
+matplotlib>3.6.3
