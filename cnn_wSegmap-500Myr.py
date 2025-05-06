@@ -1,12 +1,8 @@
-
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 from tensorflow import keras
 import tensorflow as tf
-import tensorflow_hub as hub
 
-#import os
 import sys
 import math
 import numpy as np
@@ -15,7 +11,6 @@ import glob
 from tf_fits.image import image_decode_fits
 from math import pi
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-
 
 #Check if GPUs. If there are, some code to fix cuDNN bugs
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -29,9 +24,6 @@ if gpus:
         print(e)
 else:
     print('No GPU')
-strategy = tf.distribute.MirroredStrategy()
-
-
 
 path = './data/'
 train_path = path+'train/'
@@ -39,16 +31,16 @@ valid_path = path+'valid/'
 
 extn = '.fits'
 
-train_images_fake = glob.glob(train_path+'*'+extn)
-train_images = train_images_fake
+train_images = glob.glob(train_path+'*'+extn)
 train_image_count = len(train_images)
+print(train_image_count)
 
 
-valid_images_fake = glob.glob(valid_path+'*'+extn)
-valid_images = valid_images_fake
+valid_images = glob.glob(valid_path+'*'+extn)
 valid_image_count = len(valid_images)
+print(valid_image_count)
 
-EPOCHS = 500
+EPOCHS = 1000
 BURNIN = 5
 BATCH_SIZE = 32
 VALID_BATCH_SIZE = 32
@@ -56,15 +48,15 @@ VALID_BATCH_SIZE = 32
 STEPS_PER_EPOCH = np.ceil(train_image_count/BATCH_SIZE).astype(int)
 STEPS_PER_VALID_EPOCH = np.ceil(valid_image_count/VALID_BATCH_SIZE).astype(int)
 
-IMG_HEIGHT = 128 #112
+IMG_HEIGHT = 128
 IMG_WIDTH = 128
 IMAGE_SIZE = [2*IMG_HEIGHT, 2*IMG_WIDTH]
 edge_cut = (128 - IMG_HEIGHT)//2
 CROP_FRAC = IMG_HEIGHT/(edge_cut+edge_cut+IMG_HEIGHT)
-CH = [0,1,2,3] #ugri
+CH = [0,1,2,3] #[0,1,2,3] #ugri
 
-OFSET = 500. #-750.
-SCALE = 1500.
+OFSET = 500.
+SCALE = 1000.
 
 #@tf.function
 def get_label(file_path):
@@ -76,11 +68,7 @@ def get_label(file_path):
     value = tf.strings.to_number(sub_name[-2])
 
     value += OFSET
-    #value /= SCALE
-    value /= 100.
-    value = tf.round(value)
-    value /= 15.
-
+    value /= SCALE
     return value
 
 #@tf.function
@@ -90,7 +78,7 @@ def decode_image(byte_data):
     img = tf.reshape(img, (4,128,128))
 
     #load segmaps
-    seg = image_decode_fits(byte_data, 3)#4) #KiDS_like_2024-ssnTime are on hdu 3
+    seg = image_decode_fits(byte_data, 3)
     seg = tf.reshape(seg, (4,128,128))
     img = tf.concat([img,seg], axis=0)
 
@@ -116,10 +104,7 @@ def augment_img(img, label):
 
 #@tf.function
 def crop_img(img, label):
-    #img = tf.slice(img, [edge_cut,edge_cut,0], [IMG_HEIGHT,IMG_HEIGHT,4])
     img = tf.slice(img, [edge_cut,edge_cut,0], [IMG_HEIGHT,IMG_HEIGHT,8])
-
-    #img = tf.math.asinh(img)
 
     chans = []
     for i in CH:
@@ -134,9 +119,9 @@ def crop_img(img, label):
         denominator = tf.math.subtract(maxi, mini)
         chan = tf.math.divide(numerator, denominator)
 
-        chans.append(chan)
+        chans.append(tf.math.asinh(chan))
 
-    #normalise segmaps
+        #normalise segmaps
     for i in CH:
         chan = tf.slice(img, [0,0,4+i], [IMG_HEIGHT,IMG_HEIGHT,1])
         chan = tf.reshape(chan, [IMG_HEIGHT,IMG_HEIGHT])
@@ -146,7 +131,7 @@ def crop_img(img, label):
         numerator = tf.math.subtract(chan, mini)
         denominator = tf.math.subtract(maxi, mini)
         chan = tf.math.divide(numerator, denominator)
-        
+
         chans.append(chan)
 
     img = tf.convert_to_tensor(chans)
@@ -170,7 +155,6 @@ def prepare_dataset(ds, batch_size, shuffle_buffer_size=1000, training=False):
 
     #Set batches and repeat forever
     ds = ds.batch(batch_size)
-    #ds = ds.repeat()
 
     # `prefetch` lets the dataset fetch batches in the background while the model
     # is training
@@ -180,11 +164,9 @@ def prepare_dataset(ds, batch_size, shuffle_buffer_size=1000, training=False):
 
 list_train_ds = tf.data.Dataset.list_files(train_images)
 train_ds = prepare_dataset(list_train_ds, BATCH_SIZE, 200, True)
-#iter_train_ds = iter(train_ds)
 
 list_valid_ds = tf.data.Dataset.list_files(valid_images)
 valid_ds = prepare_dataset(list_valid_ds, VALID_BATCH_SIZE, 200)
-#iter_valid_ds = iter(valid_ds)
 
 class encoder(tf.keras.Model):
     def __init__(self):
@@ -210,7 +192,7 @@ class encoder(tf.keras.Model):
         self.batn4 = tf.keras.layers.BatchNormalization(name='e_batn4')
         self.drop4 = tf.keras.layers.Dropout(self.drop_rate, name='e_drop4')
         self.pool4 = tf.keras.layers.MaxPool2D(2, 2, padding='same', name='e_pool4')
-        
+
         self.conv5 = tf.keras.layers.Conv2D(512, 2, strides=1, padding='same', name='e_conv5')
         self.batn5 = tf.keras.layers.BatchNormalization(name='e_batn5')
         self.drop5 = tf.keras.layers.Dropout(self.drop_rate, name='e_drop5')
@@ -222,10 +204,8 @@ class encoder(tf.keras.Model):
         self.pool6 = tf.keras.layers.MaxPool2D(2, 2, padding='same', name='e_pool6')
 
         self.flatten = tf.keras.layers.Flatten()
-        
-    def call(self, x, training=False):
 
-        #tf.print(inputs.shape)
+    def call(self, x, training=False):
 
         x = self.conv1(x)
         x = tf.keras.activations.relu(x)
@@ -250,7 +230,7 @@ class encoder(tf.keras.Model):
         x = self.batn4(x)
         x = self.pool4(x)
         x = self.drop4(x, training=training)
-        
+
         x = self.conv5(x)
         x = tf.keras.activations.relu(x)
         x = self.batn5(x)
@@ -263,15 +243,13 @@ class encoder(tf.keras.Model):
         x = self.pool6(x)
         x = self.drop6(x, training=training)
 
-        #tf.print(x.shape)
-
         x = self.flatten(x)
-        
+
         return x
-    
+
     def freeze(self):
         self.trainable = False
-        
+
     def unfreeze(self):
         self.trainable = True
 
@@ -279,7 +257,7 @@ class classifier(tf.keras.Model):
     def __init__(self):
         super(classifier, self).__init__()
         self.drop_rate = 0.2
-        
+
         self.fc1 = tf.keras.layers.Dense(2048, name='e_fc1')
         self.batnfc1 = tf.keras.layers.BatchNormalization(name='e_batnfc1')
         self.dropfc1 = tf.keras.layers.Dropout(self.drop_rate/2., name='e_dropfc1')
@@ -293,79 +271,77 @@ class classifier(tf.keras.Model):
         self.dropfc4 = tf.keras.layers.Dropout(self.drop_rate/2., name='e_dropfc4')
 
         self.out = tf.keras.layers.Dense(1, name='e_out', activation='sigmoid')
-    
+
     def call(self, inputs, training=False):
         x = self.fc1(inputs)
         x = tf.keras.activations.relu(x)
         x = self.batnfc1(x)
         x = self.dropfc1(x, training=training)
-        
+
         x = self.fc3(x)
         x = tf.keras.activations.relu(x)
         x = self.batnfc3(x)
         x = self.dropfc3(x, training=training)
-        
+
         x = self.fc4(x)
         x = tf.keras.activations.relu(x)
         x = self.batnfc4(x)
         x = self.dropfc4(x, training=training)
 
         return self.out(x)
-    
+
     def freeze(self):
         self.trainable = False
-        
+
     def unfreeze(self):
         self.trainable = True
 
 class ec_model(tf.keras.Model):
     def __init__(self):
         super(ec_model, self).__init__()
-        
+
         self.encoder = encoder()
         self.classifier = classifier()
-        
+
     def call(self, inputs, training=False):
-        latent = self.encoder(inputs, training)
-        label = self.classifier(latent, training)
-        
+        latent = self.encoder(inputs, training=training)
+        label = self.classifier(latent, training=training)
+
         return label
-        
+
     def train_encoder(self):
         self.encoder.unfreeze()
         self.classifier.freeze()
-        
+
     def train_classifier(self):
         self.encoder.freeze()
         self.classifier.unfreeze()
-        
+
     def train_encoder_and_classifier(self):
         self.encoder.unfreeze()
         self.classifier.unfreeze()
-        
+
     def train_all(self):
         self.encoder.unfreeze()
         self.classifier.unfreeze()
 
-with strategy.scope():
-    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        verbose=1,
-        filepath='./models/OPUS_KiDS_cnn_wSegmap_step4_b',
-        save_weights_only=True,
-        monitor='val_loss',
-        mode='min',
-        save_best_only=True)
+model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    verbose=1,
+    filepath='./models/OPUS_KiDS_cnn_wSegmap_b_500Myr.weights.h5',
+    save_weights_only=True,
+    monitor='val_loss',
+    mode='min',
+    save_best_only=True)
 
-    model = ec_model()
+model = ec_model()
 
-    model.load_weights('./models/OPUS_KiDS_cnn_wSegmap_step3_b')
 
-    optimizer = keras.optimizers.Adam(5e-6)
-    loss = keras.losses.MeanSquaredError()
+optimizer = keras.optimizers.Adam(5e-5)
+loss = keras.losses.MeanSquaredError()
 
-    model.compile(loss=loss, optimizer=optimizer, metrics=["MSE"])
+model.compile(loss=loss, optimizer=optimizer, metrics=["MSE"])
 
-history = model.fit(train_ds, validation_data=valid_ds, epochs=EPOCHS, verbose=2, #)
+history = model.fit(train_ds, validation_data=valid_ds, epochs=EPOCHS, verbose=2,
                     callbacks=[model_checkpoint_callback])
 
 import pandas as pd
@@ -375,11 +351,10 @@ result = pd.DataFrame(history.history)
 fig, ax = plt.subplots(2, 1, figsize=(10, 10))
 result[["MSE", "val_MSE"]].plot(xlabel="epoch", ylabel="score", ax=ax[0])
 result[["loss", "val_loss"]].plot(xlabel="epoch", ylabel="score", ax=ax[1])
-plt.savefig('CNN_wSegmap_step4_result.png')
-#plt.show()
+plt.savefig('./plots/CNN_result_500Myr.png')
 plt.close()
 
-model.save_weights('./models/OPUS_KiDS_cnn_wSegmap_step4_f')
+model.save_weights('./models/OPUS_KiDS_cnn_wSegmap_f_500Myr.weights.h5')
 
 mse = tf.keras.metrics.MeanSquaredError()
 
@@ -387,11 +362,11 @@ true_label = None
 pred_label = None
 
 for x, y in train_ds:
-    test = model.predict_on_batch(x)    
-    if true_label is None:       
+    test = model.predict_on_batch(x)
+    if true_label is None:
         true_label = y
         pred_label = test[:,0]
-    else:        
+    else:
         true_label = tf.concat([true_label, y], 0)
         pred_label = tf.concat([pred_label, test[:,0]], 0)
     mse.update_state(y, test)
@@ -400,8 +375,57 @@ print(len(true_label))
 
 plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
 plt.plot([0,1],[0,1],'r')
-plt.savefig('CNN_wSegmap_train_step4_f.png')
-#plt.show()
+plt.savefig('./plots/CNN_wSegmap_train_f_500Myr.png')
+plt.close()
+
+print('train mse:', mse.result())
+
+mse = tf.keras.metrics.MeanSquaredError()
+
+true_label = None
+pred_label = None
+
+for x, y in valid_ds:
+    test = model.predict_on_batch(x)
+    if true_label is None:
+        true_label = y
+        pred_label = test[:,0]
+    else:
+        true_label = tf.concat([true_label, y], 0)
+        pred_label = tf.concat([pred_label, test[:,0]], 0)
+    mse.update_state(y, test)
+
+print(len(true_label))
+
+plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
+plt.plot([0,1],[0,1],'r')
+plt.savefig('./plots/CNN_wSegmap_valid_f_500Myr.png')
+plt.close()
+
+print('valid mse:', mse.result())
+
+model.load_weights('./models/OPUS_KiDS_cnn_wSegmap_b_500Myr.weights.h5')
+
+mse = tf.keras.metrics.MeanSquaredError()
+
+true_label = None
+pred_label = None
+
+for x, y in train_ds:
+    test = model.predict_on_batch(x)
+    if true_label is None:
+        true_label = y
+        pred_label = test[:,0]
+    else:
+        true_label = tf.concat([true_label, y], 0)
+        pred_label = tf.concat([pred_label, test[:,0]], 0)
+    mse.update_state(y, test)
+
+print(len(true_label))
+
+plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
+plt.plot([0,1],[0,1],'r')
+plt.savefig('./plots/CNN_wSegmap_train_b_500Myr.png')
 plt.close()
 
 print('train mse:', mse.result())
@@ -413,11 +437,11 @@ true_label = None
 pred_label = None
 
 for x, y in valid_ds:
-    test = model.predict_on_batch(x)    
-    if true_label is None:       
+    test = model.predict_on_batch(x)
+    if true_label is None:
         true_label = y
         pred_label = test[:,0]
-    else:        
+    else:
         true_label = tf.concat([true_label, y], 0)
         pred_label = tf.concat([pred_label, test[:,0]], 0)
     mse.update_state(y, test)
@@ -426,61 +450,8 @@ print(len(true_label))
 
 plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
 plt.plot([0,1],[0,1],'r')
-plt.savefig('CNN_wSegmap_valid_step4_f.png')
-#plt.show()
+plt.savefig('./plots/CNN_wSegmap_valid_b_500Myr.png')
 plt.close()
 
 print('valid mse:', mse.result())
 
-
-model.load_weights('./models/OPUS_KiDS_cnn_wSegmap_step4_b')
-
-
-mse = tf.keras.metrics.MeanSquaredError()
-
-true_label = None
-pred_label = None
-
-for x, y in train_ds:
-    test = model.predict_on_batch(x)    
-    if true_label is None:       
-        true_label = y
-        pred_label = test[:,0]
-    else:        
-        true_label = tf.concat([true_label, y], 0)
-        pred_label = tf.concat([pred_label, test[:,0]], 0)
-    mse.update_state(y, test)
-
-print(len(true_label))
-
-plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
-plt.plot([0,1],[0,1],'r')
-plt.savefig('CNN_wSegmap_train_step4_b.png')
-#plt.show()
-plt.close()
-print('train mse:', mse.result())
-
-
-mse = tf.keras.metrics.MeanSquaredError()
-
-true_label = None
-pred_label = None
-
-for x, y in valid_ds:
-    test = model.predict_on_batch(x)    
-    if true_label is None:       
-        true_label = y
-        pred_label = test[:,0]
-    else:        
-        true_label = tf.concat([true_label, y], 0)
-        pred_label = tf.concat([pred_label, test[:,0]], 0)
-    mse.update_state(y, test)
-
-print(len(true_label))
-
-plt.hexbin(true_label, pred_label, cmap='jet', gridsize=50, mincnt=1)
-plt.plot([0,1],[0,1],'r')
-plt.savefig('CNN_wSegmap_valid_step4_b.png')
-#plt.show()
-plt.close()
-print('valid mse:', mse.result())
