@@ -1,17 +1,17 @@
 # Observationally derived change in star-formation rate as mergers progress
 ## William J. Pearson
-### V. Rodriguez-Gomez, L. Wang, B. Margalef Bentabol, L. E. Suelves
+### L. Wang, V. Rodriguez-Gomez, B. Margalef Bentabol, L. E. Suelves
 
-Code to accompany Pearson et al. A&A submitted (2024)
+Code to accompany Pearson et al. A&A, Volume 704, A234 (2025)
 
 ## Data
 
 We use images identified as having merged in the last 500 Myr or will merge in the next 500 Myr from IllustrisTNG 100 from snapshots 87 to 93 (inclusive). We further refine the merger time using simple gravity simulations, treating each merging galaxy as a single point mass. The images have a size of 128 x 128 pixels, an angular resolution of 0.2 arcsec/pixel, and have four channels: u, g, r, and i bands of KiDS. Each image also has a segmentation map for each band. Please see the paper for full details and note the images are not provided in this repo.
 
-The training/validation/testing images should be saved in the form: `<object_name>.<time_to_merger in Myr>.fits`    
-For example: `88_broadband_448870_xy.-432.fits`    
+The training/validation/testing images should be saved in the form: `<object_name>.<time_to_merger in Myr>.fits`
+For example: `88_broadband_448870_xy.-432.fits`
 These should be placed in the `./data/train/`, `./data/valid/`, and `./data/test/` directories.
-  
+
 
 ## Architecture
 
@@ -27,7 +27,23 @@ To retrain the network, run the script `cnn_wSegmap-500Myr.py`.
 If you use these networks, please cite our paper:
 
 ```
-
+@ARTICLE{2025A&A...704.234P,
+       author = {{Pearson}, W.~J. and {Wang}, L. and {Rodriguez-Gomez}, V. and {Margalef-Bentabol}, B. and {Suelves}, L.~E.},
+	    title = "{Observationally derived change in the star formation rate as mergers progress}",
+      journal = {\aap},
+     keywords = {methods: numerical, galaxies: evolution, galaxies: interactions, galaxies: star formation, galaxies: statistics, galaxies: structure, Astrophysics - Astrophysics of Galaxies},
+         year = 2025,
+        month = dec,
+       volume = {704},
+          eid = {A234},
+        pages = {A234},
+          doi = {10.1051/0004-6361/202453228},
+archivePrefix = {arXiv},
+       eprint = {2510.20697},
+ primaryClass = {astro-ph.GA},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2025A&A...704A.234P},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
 ```
 
 ## Acknowledgements
