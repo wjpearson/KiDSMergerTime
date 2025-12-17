@@ -4,6 +4,8 @@
 
 Code to accompany Pearson et al. A&A, Volume 704, A234 (2025)
 
+[![DOI](https://zenodo.org/badge/883260015.svg)](https://doi.org/10.5281/zenodo.17960835)
+
 ## Data
 
 We use images identified as having merged in the last 500 Myr or will merge in the next 500 Myr from IllustrisTNG 100 from snapshots 87 to 93 (inclusive). We further refine the merger time using simple gravity simulations, treating each merging galaxy as a single point mass. The images have a size of 128 x 128 pixels, an angular resolution of 0.2 arcsec/pixel, and have four channels: u, g, r, and i bands of KiDS. Each image also has a segmentation map for each band. Please see the paper for full details and note the images are not provided in this repo.
